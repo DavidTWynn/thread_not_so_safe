@@ -2,58 +2,53 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Thread
 import sys
 
-
-class Adder:
-    iterations = 10_000_000
-
-    def __init__(self):
-        self.counter = 0
-
-    def increment(self, *args):
-        for _ in range(self.iterations):
-            self.counter += 1
+from functions_to_verify import Adder
 
 
-def run_threaded_add(num_threads):
-    adder = Adder()
+class ThreadSafeCheck:
+    def __init__(self, runs, num_threads):
+        self.runs = runs
+        self.num_threads = num_threads
 
-    threads = []
-    for _ in range(num_threads):
-        thread = Thread(target=adder.increment)
-        thread.start()
-        threads.append(thread)
+    def check_threaded_adder(self):
+        for _ in range(self.runs):
+            result = self._run_threaded_add()
+            expected = self.num_threads * Adder.iterations
+            if result != expected:
+                print(f"Issue found: {result} but expected {expected}")
 
-    for thread in threads:
-        thread.join()
+    def check_concurrent_thread_adder(self):
+        for _ in range(self.runs):
+            result = self._run_concurrent_thread_add()
+            expected = self.num_threads * Adder.iterations
+            if result != expected:
+                print(
+                    f"Concurrent issue found: {result} but expected {expected}"
+                )
 
-    return adder.counter
+    def _run_threaded_add(self):
+        adder = Adder()
 
+        threads = []
+        for _ in range(self.num_threads):
+            thread = Thread(target=adder.increment)
+            thread.start()
+            threads.append(thread)
 
-def run_concurrent_thread_add(num_threads):
-    adder = Adder()
+        for thread in threads:
+            thread.join()
 
-    with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        results = []
-        for _ in range(num_threads):
-            results.append(executor.submit(adder.increment))
+        return adder.counter
 
-    return adder.counter
+    def _run_concurrent_thread_add(self):
+        adder = Adder()
 
+        with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
+            results = []
+            for _ in range(self.num_threads):
+                results.append(executor.submit(adder.increment))
 
-def check_threaded_adder(runs, num_threads):
-    for _ in range(runs):
-        result = run_threaded_add(num_threads)
-        expected = num_threads * Adder.iterations
-        if result != expected:
-            print(f"Issue found: {result} but expected {expected}")
-
-
-def check_concurrent_thread_adder(runs, num_threads):
-    for _ in range(runs):
-        result = run_concurrent_thread_add(num_threads)
-        expected = num_threads * Adder.iterations
-        if result != expected:
-            print(f"Concurrent issue found: {result} but expected {expected}")
+        return adder.counter
 
 
 def main():
@@ -64,10 +59,13 @@ def main():
     # Run test multiple times and verify function end result
     runs = 3
     num_threads = 10
-    check_threaded_adder(runs, num_threads)
 
-    # Run test multiple times and verify function end result
-    check_concurrent_thread_adder(runs, num_threads)
+    executor = ThreadSafeCheck(runs, num_threads)
+    # Uses threading module
+    executor.check_threaded_adder()
+
+    # Uses concurrent.futures.module
+    executor.check_concurrent_thread_adder()
 
 
 if __name__ == "__main__":
